@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Schlummertext – Voice Beta</title>
+<style>
+:root{--rgb:255,92,70;--b:.58;--fs:42px}
+*{box-sizing:border-box} html,body{margin:0;background:#000;color:rgba(var(--rgb),var(--b));font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{height:100dvh;overflow:hidden}.app{height:100%;display:flex;flex-direction:column}
+header,footer{background:#030303;padding:10px 12px;border-color:rgba(255,255,255,.06)}
+header{display:flex;gap:8px;border-bottom:1px solid rgba(255,255,255,.06)}
+footer{border-top:1px solid rgba(255,255,255,.06);padding-bottom:max(10px,env(safe-area-inset-bottom))}
+select,button{background:#0b0b0b;color:rgba(var(--rgb),.85);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:11px}
+select{flex:1;min-width:0}.viewer{flex:1;overflow:auto;padding:25vh 8vw 35vh;scroll-behavior:smooth}
+#lyrics{max-width:900px;margin:auto;font-size:var(--fs);font-weight:650;line-height:1.45}
+.line{margin-bottom:.85em;opacity:.25;transition:.18s}.line.active{opacity:1;transform:scale(1.015);transform-origin:left}.line.next{opacity:.56}.gap{height:.7em}
+.controls{display:flex;gap:8px}.controls button{flex:1}.on{box-shadow:inset 0 0 0 2px rgba(var(--rgb),.3)}
+#status,#heard{font-size:11px;text-align:center;margin-top:6px;opacity:.5}#heard{font-style:italic;min-height:14px}
+.sliders{display:flex;gap:12px;margin-bottom:8px}.sliders label{font-size:11px;opacity:.5;display:flex;align-items:center;gap:5px}.sliders input{width:85px}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<select id="song">
+<option value="0">Schlaf, Kindlein, schlaf</option>
+<option value="1">Weißt du, wie viel Sternlein stehen</option>
+<option value="2">Der Mond ist aufgegangen</option>
+<option value="3">Guten Abend, gut' Nacht</option>
+</select>
+</header>
+<main class="viewer" id="viewer"><div id="lyrics"></div></main>
+<footer>
+<div class="sliders">
+<label>Dunkel <input id="bright" type="range" min="12" max="100" value="58"></label>
+<label>Schrift <input id="font" type="range" min="28" max="70" value="42"></label>
+</div>
+<div class="controls">
+<button id="prev">◀</button><button id="mic">🎙 Mikro an</button><button id="next">▶</button>
+</div>
+<div id="status">Bereit. Mikro antippen und Safari-Zugriff erlauben.</div>
+<div id="heard"></div>
+</footer>
+</div>
+<script>
+const songs=[
+["Schlaf, Kindlein, schlaf,","der Vater hüt' die Schaf,","die Mutter schüttelt's Bäumelein,","da fällt herab ein Träumelein.","Schlaf, Kindlein, schlaf.","","Schlaf, Kindlein, schlaf,","am Himmel ziehn die Schaf,","die Sternlein sind die Lämmerlein,","der Mond, der ist das Schäferlein.","Schlaf, Kindlein, schlaf."],
+["Weißt du, wie viel Sternlein stehen","an dem blauen Himmelszelt?","Weißt du, wie viel Wolken gehen","weithin über alle Welt?","Gott der Herr hat sie gezählet,","dass ihm auch nicht eines fehlet","an der ganzen großen Zahl."],
+["Der Mond ist aufgegangen,","die goldnen Sternlein prangen","am Himmel hell und klar;","der Wald steht schwarz und schweiget,","und aus den Wiesen steiget","der weiße Nebel wunderbar."],
+["Guten Abend, gut' Nacht,","mit Rosen bedacht,","mit Näglein besteckt,","schlupf unter die Deck'.","Morgen früh, wenn Gott will,","wirst du wieder geweckt."]
+];
+const $=x=>document.getElementById(x), song=$("song"), lyrics=$("lyrics"), status=$("status"), heard=$("heard"), mic=$("mic");
+let cur=0,rec=null,on=false;
+function inds(){return songs[+song.value].map((x,i)=>x?i:null).filter(x=>x!==null)}
+function render(){lyrics.innerHTML="";songs[+song.value].forEach((t,i)=>{let d=document.createElement("div");d.className=t?"line":"gap";if(t){d.textContent=t;d.dataset.i=i}lyrics.appendChild(d)});cur=inds()[0];paint(false)}
+function paint(scroll=true){document.querySelectorAll(".line").forEach(x=>x.classList.remove("active","next"));let a=document.querySelector(`[data-i="${cur}"]`);if(!a)return;a.classList.add("active");let ar=inds(),p=ar.indexOf(cur),n=document.querySelector(`[data-i="${ar[p+1]}"]`);if(n)n.classList.add("next");if(scroll)a.scrollIntoView({behavior:"smooth",block:"center"})}
+function step(d){let ar=inds(),p=Math.max(0,Math.min(ar.length-1,ar.indexOf(cur)+d));cur=ar[p];paint()}
+function norm(s){return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/ß/g,"ss").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim()}
+function score(a,b){let A=norm(a).split(" "),B=norm(b).split(" "),h=0;B.forEach(w=>{if(w.length>2&&A.some(x=>x===w||(w.length>4&&x.startsWith(w.slice(0,4)))))h++});return h/Math.max(2,Math.min(B.filter(x=>x.length>2).length,5))}
+function match(t){let ar=inds(),p=ar.indexOf(cur),best={s:0};for(let d=-1;d<=3;d++){let q=p+d;if(q>=0&&q<ar.length){let s=score(t,songs[+song.value][ar[q]]);if(s>best.s)best={s:s,i:ar[q]}}}if(best.s>=.38){cur=best.i;paint();status.textContent="✓ Zeile erkannt"}else status.textContent="Ich höre zu …"}
+function setup(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){status.textContent="Safari stellt hier keine SpeechRecognition bereit.";mic.disabled=true;return}rec=new SR();rec.lang="de-DE";rec.continuous=true;rec.interimResults=true;rec.onstart=()=>{on=true;mic.classList.add("on");mic.textContent="■ Mikro aus";status.textContent="Ich höre zu … sing los"};rec.onresult=e=>{let t="";for(let i=e.resultIndex;i<e.results.length;i++)t+=" "+e.results[i][0].transcript;t=t.trim();if(t){heard.textContent="„"+t+"“";match(t)}};rec.onerror=e=>{status.textContent="Fehler: "+e.error;if(e.error==="not-allowed")status.textContent="Mikrofon nicht erlaubt – Safari-Einstellungen prüfen."};rec.onend=()=>{if(on){try{rec.start()}catch(e){}}}}
+mic.onclick=()=>{if(!rec)setup();if(!rec)return;if(on){on=false;try{rec.stop()}catch(e){}mic.classList.remove("on");mic.textContent="🎙 Mikro an";status.textContent="Mikro aus"}else{try{rec.start()}catch(e){status.textContent="Startfehler: "+e.message}}};
+$("prev").onclick=()=>step(-1);$("next").onclick=()=>step(1);song.onchange=render;
+$("bright").oninput=e=>document.documentElement.style.setProperty("--b",e.target.value/100);
+$("font").oninput=e=>document.documentElement.style.setProperty("--fs",e.target.value+"px");
+render();setup();
+</script>
+</body></html>
